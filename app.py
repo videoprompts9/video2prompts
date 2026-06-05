@@ -85,12 +85,20 @@ with left:
     lang = st.radio("", ["🇬🇧 English","🇵🇰 Urdu (Roman)","🇮🇳 Hindi (Roman)"], label_visibility="collapsed")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("**🔑 Gemini API Key**")
-    api_key = st.text_input("", type="password", placeholder="AIza...", label_visibility="collapsed")
-    st.markdown("<a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#60a5fa;font-size:0.75rem;'>🆓 Free key yahan se lo</a>", unsafe_allow_html=True)
+    st.markdown("**🔑 API Provider**")
+    api_provider = st.radio("", ["🔵 Gemini (Google)", "🟠 OpenRouter"], label_visibility="collapsed")
+
+    if "Gemini" in api_provider:
+        api_key = st.text_input("", type="password", placeholder="AIza...", label_visibility="collapsed")
+        st.markdown("<a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#60a5fa;font-size:0.75rem;'>🆓 Free Gemini key yahan se lo</a>", unsafe_allow_html=True)
+    else:
+        api_key = st.text_input("", type="password", placeholder="sk-or-v1-...", label_visibility="collapsed")
+        st.markdown("<a href='https://openrouter.ai/keys' target='_blank' style='color:#60a5fa;font-size:0.75rem;'>🔑 OpenRouter key yahan se lo</a>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     analyze_btn = st.button("✨ Analyze Video", use_container_width=True)
+    # Store provider for use in right column
+    st.session_state["provider"] = api_provider
 
 with right:
     st.markdown("#### SCENE BREAKDOWN")
@@ -134,40 +142,82 @@ Return ONLY valid JSON (no markdown, no extra text):
 }}"""
 
             try:
+                provider = st.session_state.get("provider","🔵 Gemini (Google)")
+
                 if uploaded:
-                    # File upload method
                     import base64
                     progress = st.progress(0, text="📤 Upload ho rahi hai...")
                     video_bytes = uploaded.getvalue()
                     video_b64 = base64.b64encode(video_bytes).decode("utf-8")
                     progress.progress(50, text="🧠 Analyzing...")
 
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-                    body = {
-                        "contents": [{"parts": [
-                            {"inline_data": {"mime_type": "video/mp4", "data": video_b64}},
-                            {"text": prompt}
-                        ]}],
-                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
-                    }
-                    r = requests.post(url, json=body, timeout=180)
-                    r.raise_for_status()
-                    progress.progress(100, text="✅ Done!")
-                    raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-
-                else:
-                    # URL method - much faster!
-                    with st.spinner("🧠 Analyzing video from link..."):
+                    if "OpenRouter" in provider:
+                        # OpenRouter with base64 image support
+                        url = "https://openrouter.ai/api/v1/chat/completions"
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        }
+                        body = {
+                            "model": "google/gemini-flash-1.5",
+                            "messages": [{"role": "user", "content": [
+                                {"type": "image_url", "image_url": {"url": f"data:video/mp4;base64,{video_b64}"}},
+                                {"type": "text", "text": prompt}
+                            ]}],
+                            "max_tokens": 8192
+                        }
+                    else:
+                        # Gemini direct
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                         body = {
                             "contents": [{"parts": [
-                                {"text": f"Video URL: {video_url}\n\n{prompt}"}
+                                {"inline_data": {"mime_type": "video/mp4", "data": video_b64}},
+                                {"text": prompt}
                             ]}],
                             "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
                         }
-                        r = requests.post(url, json=body, timeout=120)
-                        r.raise_for_status()
+                        headers = {"Content-Type": "application/json"}
+
+                    r = requests.post(url, json=body, headers=headers, timeout=180)
+                    r.raise_for_status()
+
+                    if "OpenRouter" in provider:
+                        raw = r.json()["choices"][0]["message"]["content"]
+                    else:
                         raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+                    progress.progress(100, text="✅ Done!")
+
+                else:
+                    # URL method
+                    with st.spinner("🧠 Analyzing video from link..."):
+                        if "OpenRouter" in provider:
+                            url = "https://openrouter.ai/api/v1/chat/completions"
+                            headers = {
+                                "Authorization": f"Bearer {api_key}",
+                                "Content-Type": "application/json"
+                            }
+                            body = {
+                                "model": "google/gemini-flash-1.5",
+                                "messages": [{"role": "user", "content": [
+                                    {"type": "text", "text": f"Video URL: {video_url}\n\n{prompt}"}
+                                ]}],
+                                "max_tokens": 8192
+                            }
+                            r = requests.post(url, json=body, headers=headers, timeout=120)
+                            r.raise_for_status()
+                            raw = r.json()["choices"][0]["message"]["content"]
+                        else:
+                            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+                            body = {
+                                "contents": [{"parts": [
+                                    {"text": f"Video URL: {video_url}\n\n{prompt}"}
+                                ]}],
+                                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
+                            }
+                            r = requests.post(url, json=body, timeout=120)
+                            r.raise_for_status()
+                            raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
                 # Parse JSON
                 raw = raw.strip()
