@@ -159,7 +159,7 @@ Return ONLY valid JSON (no markdown, no extra text):
                             "Content-Type": "application/json"
                         }
                         body = {
-                            "model": "google/gemini-flash-1.5",
+                            "model": "google/gemini-2.0-flash-exp:free",
                             "messages": [{"role": "user", "content": [
                                 {"type": "image_url", "image_url": {"url": f"data:video/mp4;base64,{video_b64}"}},
                                 {"type": "text", "text": prompt}
@@ -198,7 +198,7 @@ Return ONLY valid JSON (no markdown, no extra text):
                                 "Content-Type": "application/json"
                             }
                             body = {
-                                "model": "google/gemini-flash-1.5",
+                                "model": "google/gemini-2.0-flash-exp:free",
                                 "messages": [{"role": "user", "content": [
                                     {"type": "text", "text": f"Video URL: {video_url}\n\n{prompt}"}
                                 ]}],
