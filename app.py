@@ -1,10 +1,6 @@
 import streamlit as st
 import json
-import base64
 import requests
-import tempfile
-import os
-import time
 
 st.set_page_config(page_title="B-Roll Director AI", page_icon="🎬", layout="wide")
 
@@ -15,7 +11,6 @@ st.markdown("""
 html,body,[class*="css"]{background:#0f0f0f !important;color:#f0f0f0;}
 .stApp{background:#0f0f0f !important;}
 [data-testid="stSidebar"]{background:#1a1a1a !important;border-right:1px solid #2a2a2a;}
-[data-testid="stFileUploader"]{background:#1a1a1a !important;border:2px dashed #333 !important;border-radius:12px !important;}
 .stButton>button{background:#2563eb !important;color:white !important;border:none !important;border-radius:8px !important;font-weight:600 !important;width:100% !important;}
 .stButton>button:hover{background:#1d4ed8 !important;}
 .scene-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:1.2rem;margin-bottom:1rem;}
@@ -28,6 +23,8 @@ html,body,[class*="css"]{background:#0f0f0f !important;color:#f0f0f0;}
 .label-video{color:#60a5fa;}
 .top-header{display:flex;align-items:center;gap:10px;padding:1rem 0;border-bottom:1px solid #2a2a2a;margin-bottom:1.5rem;}
 .header-badge{background:#1e3a5f;color:#60a5fa;font-size:0.72rem;padding:3px 10px;border-radius:20px;font-weight:600;}
+.option-box{background:#1a1a1a;border:2px solid #333;border-radius:12px;padding:1rem;margin-bottom:0.8rem;cursor:pointer;}
+.option-box.active{border-color:#2563eb;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,15 +39,38 @@ st.markdown("""
 left, right = st.columns([1, 1.5])
 
 with left:
-    st.markdown("#### UPLOAD VIDEO")
-    uploaded = st.file_uploader("", type=["mp4","mov","avi","mkv","webm"], label_visibility="collapsed")
-    if uploaded:
-        st.video(uploaded)
-        st.markdown(f"<div style='color:#666;font-size:0.8rem;'>{uploaded.name} — {uploaded.size/1024/1024:.1f} MB</div>", unsafe_allow_html=True)
-    else:
-        st.markdown("""<div style='background:#1a1a1a;border:2px dashed #333;border-radius:12px;
-        padding:2rem;text-align:center;color:#555;font-size:0.85rem;'>
-        🎬 Upload a video to reverse-engineer its visual scenes</div>""", unsafe_allow_html=True)
+    st.markdown("#### VIDEO INPUT")
+
+    # Video input method
+    method = st.radio("", ["📁 File Upload", "🔗 YouTube Link", "☁️ Google Drive Link"],
+        label_visibility="collapsed")
+
+    video_url = None
+    uploaded = None
+
+    if method == "📁 File Upload":
+        st.markdown("<div style='color:#f59e0b;font-size:0.8rem;'>⚠️ 20MB se kam video use karo — fast hoga!</div>", unsafe_allow_html=True)
+        uploaded = st.file_uploader("", type=["mp4","mov","avi","mkv","webm"], label_visibility="collapsed")
+        if uploaded:
+            st.video(uploaded)
+            mb = uploaded.size/1024/1024
+            if mb > 20:
+                st.error(f"❌ File {mb:.1f}MB hai — 20MB se kam rakho!")
+                uploaded = None
+            else:
+                st.success(f"✅ {uploaded.name} — {mb:.1f}MB")
+
+    elif method == "🔗 YouTube Link":
+        st.markdown("<div style='color:#aaa;font-size:0.8rem;'>YouTube video ka link paste karo</div>", unsafe_allow_html=True)
+        video_url = st.text_input("", placeholder="https://youtube.com/watch?v=...", label_visibility="collapsed")
+        if video_url:
+            st.markdown(f"<div style='color:#34d399;font-size:0.8rem;'>✅ Link ready!</div>", unsafe_allow_html=True)
+
+    elif method == "☁️ Google Drive Link":
+        st.markdown("<div style='color:#aaa;font-size:0.8rem;'>Google Drive video ka shareable link paste karo</div>", unsafe_allow_html=True)
+        video_url = st.text_input("", placeholder="https://drive.google.com/file/d/...", label_visibility="collapsed")
+        if video_url:
+            st.markdown(f"<div style='color:#34d399;font-size:0.8rem;'>✅ Link ready!</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("**📐 Aspect Ratio**")
@@ -66,7 +86,8 @@ with left:
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("**🔑 Gemini API Key**")
-    api_key = st.text_input("", type="password", placeholder="AIza... (aistudio.google.com/app/apikey)", label_visibility="collapsed")
+    api_key = st.text_input("", type="password", placeholder="AIza...", label_visibility="collapsed")
+    st.markdown("<a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#60a5fa;font-size:0.75rem;'>🆓 Free key yahan se lo</a>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     analyze_btn = st.button("✨ Analyze Video", use_container_width=True)
@@ -77,11 +98,11 @@ with right:
     if analyze_btn:
         if not api_key:
             st.error("❌ API Key daalo!")
-        elif not uploaded:
-            st.error("❌ Video upload karo!")
+        elif not uploaded and not video_url:
+            st.error("❌ Video upload karo ya link daalo!")
         else:
             if "Urdu" in lang:
-                li = "Roman Urdu mein likho (Urdu English huroof mein)"
+                li = "Roman Urdu mein likho (Urdu English huroof mein). Jaise: 'Ek aadmi paani ke paas...'"
                 ll = "Roman Urdu"
             elif "Hindi" in lang:
                 li = "Roman Hindi mein likho"
@@ -92,72 +113,10 @@ with right:
 
             style_clean = style.split(" ",1)[1] if " " in style else style
 
-            try:
-                # Step 1: Save video to temp file
-                with st.spinner("📤 Video upload ho rahi hai..."):
-                    ext = uploaded.name.split('.')[-1]
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
-                        tmp.write(uploaded.getvalue())
-                        tmp_path = tmp.name
-
-                    file_size = os.path.getsize(tmp_path)
-
-                    # Step 2: Upload to Gemini File API
-                    upload_url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={api_key}"
-                    with open(tmp_path, 'rb') as f:
-                        video_data = f.read()
-
-                    # Force correct mime type
-                    mime = "video/mp4"
-
-                    # Initial resumable upload request
-                    headers = {
-                        "X-Goog-Upload-Protocol": "resumable",
-                        "X-Goog-Upload-Command": "start",
-                        "X-Goog-Upload-Header-Content-Length": str(file_size),
-                        "X-Goog-Upload-Header-Content-Type": mime,
-                        "Content-Type": "application/json"
-                    }
-                    init_resp = requests.post(
-                        upload_url,
-                        headers=headers,
-                        json={"file": {"display_name": uploaded.name}},
-                        timeout=30
-                    )
-                    init_resp.raise_for_status()
-                    upload_uri = init_resp.headers.get("X-Goog-Upload-URL")
-
-                    # Upload video bytes
-                    upload_headers = {
-                        "Content-Length": str(file_size),
-                        "X-Goog-Upload-Offset": "0",
-                        "X-Goog-Upload-Command": "upload, finalize"
-                    }
-                    upload_resp = requests.post(upload_uri, headers=upload_headers, data=video_data, timeout=120)
-                    upload_resp.raise_for_status()
-                    file_info = upload_resp.json()
-                    file_uri = file_info["file"]["uri"]
-                    file_name = file_info["file"]["name"]
-
-                # Step 3: Wait for processing
-                with st.spinner("⏳ Video process ho rahi hai..."):
-                    for _ in range(30):
-                        check = requests.get(
-                            f"https://generativelanguage.googleapis.com/v1beta/{file_name}?key={api_key}",
-                            timeout=10
-                        )
-                        state = check.json().get("state","")
-                        if state == "ACTIVE": break
-                        if state == "FAILED":
-                            st.error("❌ Video process fail. Dobara try karo.")
-                            st.stop()
-                        time.sleep(3)
-
-                # Step 4: Analyze
-                prompt = f"""Analyze this video carefully. Detect every scene (even 3-5 second ones).
+            prompt = f"""Watch this video and detect every scene carefully (even 3-5 second scenes).
 Style: {style_clean} | Ratio: {ratio} | {li}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no markdown, no extra text):
 {{
   "video_title": "title",
   "scenes": [
@@ -165,35 +124,52 @@ Return ONLY valid JSON:
       "scene_number": 1,
       "timestamp": "0:00 - 0:06",
       "duration": "6s",
-      "description": "what happens",
-      "image_prompt": "detailed for Midjourney/DALL-E/SD/Firefly/Leonardo/Flux, {style_clean}, {ratio}",
-      "animation_prompt": "for Runway/Kling/Pika/Luma/Haiper, camera motion, {ratio}",
-      "audio_prompt": "for Suno/Udio/ElevenLabs, genre BPM mood instruments",
+      "description": "what happens visually",
+      "image_prompt": "ultra detailed for Midjourney/DALL-E/SD/Firefly/Leonardo/Flux, {style_clean}, {ratio}",
+      "animation_prompt": "for Runway/Kling/Pika/Luma/Haiper, camera movements, {ratio}",
+      "audio_prompt": "for Suno/Udio/ElevenLabs/Musicgen, genre BPM mood instruments",
       "video_prompt": "for Sora/Runway/Kling/Pika/Luma/Veo, {ratio}, {style_clean}"
     }}
   ]
 }}"""
 
-                with st.spinner("🧠 Scenes analyze ho rahi hain..."):
-                    gen_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            try:
+                if uploaded:
+                    # File upload method
+                    import base64
+                    progress = st.progress(0, text="📤 Upload ho rahi hai...")
+                    video_bytes = uploaded.getvalue()
+                    video_b64 = base64.b64encode(video_bytes).decode("utf-8")
+                    progress.progress(50, text="🧠 Analyzing...")
+
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                     body = {
                         "contents": [{"parts": [
-                            {"file_data": {"mime_type": "video/mp4", "file_uri": file_uri}},
+                            {"inline_data": {"mime_type": "video/mp4", "data": video_b64}},
                             {"text": prompt}
                         ]}],
                         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
                     }
-                    r = requests.post(gen_url, json=body, timeout=120)
+                    r = requests.post(url, json=body, timeout=180)
                     r.raise_for_status()
+                    progress.progress(100, text="✅ Done!")
                     raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-                # Cleanup
-                os.unlink(tmp_path)
-                try:
-                    requests.delete(f"https://generativelanguage.googleapis.com/v1beta/{file_name}?key={api_key}", timeout=10)
-                except: pass
+                else:
+                    # URL method - much faster!
+                    with st.spinner("🧠 Analyzing video from link..."):
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+                        body = {
+                            "contents": [{"parts": [
+                                {"text": f"Video URL: {video_url}\n\n{prompt}"}
+                            ]}],
+                            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
+                        }
+                        r = requests.post(url, json=body, timeout=120)
+                        r.raise_for_status()
+                        raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-                # Parse
+                # Parse JSON
                 raw = raw.strip()
                 if "```" in raw:
                     parts = raw.split("```")
@@ -210,10 +186,16 @@ Return ONLY valid JSON:
 
             except requests.exceptions.HTTPError as e:
                 code = e.response.status_code if hasattr(e,'response') else '?'
-                if code == 429: st.error("❌ Too Many Requests — 5 min wait karo ya nayi key banao!")
-                elif code == 403: st.error("❌ API Key galat hai!")
-                elif code == 400: st.error("❌ Video format issue — MP4 use karo!")
-                else: st.error(f"❌ API Error {code}: {str(e)}")
+                if code == 429:
+                    st.error("❌ Too Many Requests — 5 min wait karo ya nayi API key banao!")
+                elif code == 403:
+                    st.error("❌ API Key galat hai!")
+                else:
+                    try: msg = e.response.json().get("error",{}).get("message","")
+                    except: msg = str(e)
+                    st.error(f"❌ Error {code}: {msg}")
+            except json.JSONDecodeError:
+                st.error("❌ Response parse nahi hua. Dobara try karo.")
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
 
@@ -244,8 +226,7 @@ Return ONLY valid JSON:
         st.markdown("---")
         out = f"B-ROLL DIRECTOR AI\n{'='*60}\nTitle: {title} | Language: {ll}\n{'='*60}\n\n"
         for s in scenes:
-            out += f"SCENE {s['scene_number']} | {s.get('timestamp','')} ({s.get('duration','')})\n"
-            out += f"Description: {s.get('description','')}\n\nIMAGE:\n{s.get('image_prompt','')}\n\nANIMATION:\n{s.get('animation_prompt','')}\n\nAUDIO:\n{s.get('audio_prompt','')}\n\nVIDEO:\n{s.get('video_prompt','')}\n\n{'-'*60}\n\n"
+            out += f"SCENE {s['scene_number']} | {s.get('timestamp','')} ({s.get('duration','')})\nDesc: {s.get('description','')}\n\nIMAGE:\n{s.get('image_prompt','')}\n\nANIMATION:\n{s.get('animation_prompt','')}\n\nAUDIO:\n{s.get('audio_prompt','')}\n\nVIDEO:\n{s.get('video_prompt','')}\n\n{'-'*60}\n\n"
 
         d1,d2 = st.columns(2)
         with d1:
@@ -256,4 +237,8 @@ Return ONLY valid JSON:
         st.markdown("""<div style='background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;
         padding:3rem;text-align:center;color:#444;'>
         <div style='font-size:2rem;margin-bottom:1rem;'>🎬</div>
-        Upload a video and click Analyze<br>to see scene breakdown here</div>""", unsafe_allow_html=True)
+        <b style='color:#666;'>3 Options:</b><br><br>
+        <span style='color:#555;'>📁 File Upload (20MB se kam)</span><br>
+        <span style='color:#555;'>🔗 YouTube Link (fastest!)</span><br>
+        <span style='color:#555;'>☁️ Google Drive Link</span>
+        </div>""", unsafe_allow_html=True)
