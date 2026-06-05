@@ -107,12 +107,15 @@ with right:
                     with open(tmp_path, 'rb') as f:
                         video_data = f.read()
 
+                    # Force correct mime type
+                    mime = "video/mp4"
+
                     # Initial resumable upload request
                     headers = {
                         "X-Goog-Upload-Protocol": "resumable",
                         "X-Goog-Upload-Command": "start",
                         "X-Goog-Upload-Header-Content-Length": str(file_size),
-                        "X-Goog-Upload-Header-Content-Type": uploaded.type,
+                        "X-Goog-Upload-Header-Content-Type": mime,
                         "Content-Type": "application/json"
                     }
                     init_resp = requests.post(
@@ -175,7 +178,7 @@ Return ONLY valid JSON:
                     gen_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                     body = {
                         "contents": [{"parts": [
-                            {"file_data": {"mime_type": uploaded.type, "file_uri": file_uri}},
+                            {"file_data": {"mime_type": "video/mp4", "file_uri": file_uri}},
                             {"text": prompt}
                         ]}],
                         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
