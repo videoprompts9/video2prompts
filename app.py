@@ -46,7 +46,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 btn = st.button("🚀 Scenes Detect Karo & Prompts Generate Karo", use_container_width=True)
 
 def call_gemini(api_key, video_b64, mime_type, prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     body = {
         "contents": [{
             "parts": [
