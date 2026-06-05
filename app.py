@@ -1,192 +1,351 @@
 import streamlit as st
-import tempfile
-import os
-import time
 import json
 import base64
 import requests
 
-st.set_page_config(page_title="Video2Prompts AI Pro", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="B-Roll Director AI", page_icon="🎬", layout="wide")
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;800&display=swap');
-html,body,[class*="css"]{font-family:'Syne',sans-serif;background:#080810;color:#e2e8f0;}
-.stApp{background:#080810;}
-.hero{font-size:2.5rem;font-weight:800;background:linear-gradient(135deg,#7c3aed,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.stButton>button{background:linear-gradient(135deg,#6d28d9,#0891b2);color:white;border:none;border-radius:8px;font-weight:700;font-size:1rem;width:100%;}
-[data-testid="stSidebar"]{background:#10101c;}
-.scene-box{background:#10101c;border-left:4px solid #7c3aed;border-radius:0 10px 10px 0;padding:0.8rem 1.2rem;margin-bottom:1rem;}
-.ok-banner{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:10px;padding:1rem;margin-bottom:1rem;}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+*{font-family:'Inter',sans-serif;}
+html,body,[class*="css"]{background:#0f0f0f !important;color:#f0f0f0;}
+.stApp{background:#0f0f0f !important;}
+
+/* Sidebar */
+[data-testid="stSidebar"]{background:#1a1a1a !important;border-right:1px solid #2a2a2a;}
+
+/* Upload box */
+[data-testid="stFileUploader"]{
+    background:#1a1a1a !important;
+    border:2px dashed #333 !important;
+    border-radius:12px !important;
+    padding:1rem !important;
+}
+
+/* Buttons */
+.stButton>button{
+    background:#2563eb !important;
+    color:white !important;
+    border:none !important;
+    border-radius:8px !important;
+    font-weight:600 !important;
+    font-size:0.95rem !important;
+    width:100% !important;
+    padding:0.6rem !important;
+}
+.stButton>button:hover{background:#1d4ed8 !important;}
+
+/* Ratio buttons */
+.ratio-btn{
+    display:inline-block;
+    background:#1a1a1a;
+    border:2px solid #333;
+    border-radius:8px;
+    padding:6px 16px;
+    font-size:0.85rem;
+    color:#aaa;
+    cursor:pointer;
+    margin-right:8px;
+}
+.ratio-btn.active{
+    background:#2563eb;
+    border-color:#2563eb;
+    color:white;
+}
+
+/* Style buttons */
+.style-card{
+    background:#1a1a1a;
+    border:2px solid #333;
+    border-radius:10px;
+    padding:0.8rem;
+    text-align:center;
+    cursor:pointer;
+    margin-bottom:0.5rem;
+    font-size:0.85rem;
+    color:#aaa;
+}
+.style-card.active{
+    border-color:#2563eb;
+    color:#60a5fa;
+}
+
+/* Scene card */
+.scene-card{
+    background:#1a1a1a;
+    border:1px solid #2a2a2a;
+    border-radius:12px;
+    padding:1.2rem;
+    margin-bottom:1rem;
+}
+.scene-title{
+    font-size:0.9rem;
+    font-weight:600;
+    color:#60a5fa;
+    margin-bottom:0.5rem;
+    font-family:monospace;
+}
+.prompt-box{
+    background:#0f0f0f;
+    border:1px solid #2a2a2a;
+    border-radius:8px;
+    padding:0.8rem;
+    font-size:0.82rem;
+    color:#d0d0d0;
+    line-height:1.6;
+    margin-bottom:0.6rem;
+}
+.prompt-label{
+    font-size:0.72rem;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin-bottom:0.3rem;
+}
+.label-img{color:#a78bfa;}
+.label-anim{color:#34d399;}
+.label-audio{color:#f59e0b;}
+.label-video{color:#60a5fa;}
+
+/* Top header */
+.top-header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:1rem 0;
+    border-bottom:1px solid #2a2a2a;
+    margin-bottom:1.5rem;
+}
+.header-title{font-size:1.3rem;font-weight:700;color:#f0f0f0;}
+.header-badge{
+    background:#1e3a5f;
+    color:#60a5fa;
+    font-size:0.72rem;
+    padding:3px 10px;
+    border-radius:20px;
+    font-weight:600;
+}
+.analyzing-box{
+    background:#1a1a2e;
+    border:1px solid #2563eb;
+    border-radius:10px;
+    padding:1rem;
+    text-align:center;
+    color:#60a5fa;
+    margin:1rem 0;
+}
+input[type="text"],[data-testid="stTextInput"] input{
+    background:#1a1a1a !important;
+    border:1px solid #333 !important;
+    color:#f0f0f0 !important;
+    border-radius:8px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-with st.sidebar:
-    st.markdown("### 🔑 Gemini API Key")
-    api_key = st.text_input("Google Gemini API Key", type="password", placeholder="AIza...")
-    st.markdown("""<div style='background:rgba(109,40,217,0.1);border:1px solid rgba(109,40,217,0.3);
-    border-radius:8px;padding:0.7rem;font-size:0.75rem;color:#a78bfa;'>
-    🆓 FREE Key yahan se lo:<br>
-    <a href='https://aistudio.google.com/app/apikey' target='_blank' style='color:#67e8f9;'>
-    aistudio.google.com/app/apikey</a>
-    </div>""", unsafe_allow_html=True)
-    st.markdown("---")
-    num_scenes = st.slider("Max Scenes", 3, 20, 10)
-    lang = st.radio("Language:", ["🇬🇧 English", "🇵🇰 Urdu (Roman)", "🇮🇳 Hindi (Roman)"])
+# ── Header ──────────────────────────────────────────────────
+st.markdown("""
+<div class='top-header'>
+<span style='font-size:1.5rem;'>🎬</span>
+<span class='header-title'>B-Roll Director AI</span>
+<span class='header-badge'>Powered by Gemini</span>
+</div>
+""", unsafe_allow_html=True)
 
-st.markdown('<div class="hero">🎬 Video2Prompts AI Pro</div>', unsafe_allow_html=True)
-st.markdown("**Har scene ka Image + Animation + Audio + Video Prompt**")
-st.markdown("---")
+# ── Layout: Left Panel + Right Panel ────────────────────────
+left, right = st.columns([1, 1.5])
 
-uploaded = st.file_uploader("📁 Video Upload Karo (2 min se kam)", type=["mp4","mov","avi","mkv","webm"])
-if uploaded:
-    st.video(uploaded)
-
-st.markdown("<br>", unsafe_allow_html=True)
-btn = st.button("🚀 Scenes Detect Karo & Prompts Generate Karo", use_container_width=True)
-
-def call_gemini(api_key, video_b64, mime_type, prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-    body = {
-        "contents": [{
-            "parts": [
-                {"inline_data": {"mime_type": mime_type, "data": video_b64}},
-                {"text": prompt}
-            ]
-        }],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
-    }
-    resp = requests.post(url, json=body, timeout=120)
-    resp.raise_for_status()
-    result = resp.json()
-    return result["candidates"][0]["content"]["parts"][0]["text"]
-
-if btn:
-    if not api_key:
-        st.error("❌ API Key daalo sidebar mein!")
-    elif not uploaded:
-        st.error("❌ Video upload karo pehle!")
+with left:
+    st.markdown("#### UPLOAD VIDEO")
+    uploaded = st.file_uploader("", type=["mp4","mov","avi","mkv","webm"],
+        label_visibility="collapsed")
+    if uploaded:
+        st.video(uploaded)
+        st.markdown(f"<div style='color:#666;font-size:0.8rem;'>{uploaded.name} — {uploaded.size/1024/1024:.1f} MB</div>", unsafe_allow_html=True)
     else:
-        try:
+        st.markdown("""
+        <div style='background:#1a1a1a;border:2px dashed #333;border-radius:12px;
+        padding:2rem;text-align:center;color:#555;font-size:0.85rem;'>
+        🎬 Upload a video to reverse-engineer<br>its visual scenes
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Aspect Ratio
+    st.markdown("**📐 Aspect Ratio**")
+    ratio = st.radio("", ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        horizontal=True, index=2, label_visibility="collapsed")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Visual Style
+    st.markdown("**🎨 Visual Style**")
+    style = st.selectbox("", [
+        "🎬 Cinematic",
+        "🏛️ Ancient Cinematic",
+        "📸 Photorealistic",
+        "🎨 Artistic",
+        "🌆 Modern Urban",
+        "🌿 Nature & Landscape"
+    ], label_visibility="collapsed")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Language
+    st.markdown("**🌐 Language**")
+    lang = st.radio("", ["🇬🇧 English", "🇵🇰 Urdu (Roman)", "🇮🇳 Hindi (Roman)"],
+        label_visibility="collapsed")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # API Key
+    st.markdown("**🔑 API Key**")
+    api_key = st.text_input("", type="password", placeholder="AIza... (aistudio.google.com)",
+        label_visibility="collapsed")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    analyze_btn = st.button("✨ Analyzing...", use_container_width=True)
+
+with right:
+    st.markdown("#### SCENE BREAKDOWN")
+
+    if analyze_btn:
+        if not api_key:
+            st.error("❌ API Key daalo!")
+        elif not uploaded:
+            st.error("❌ Video upload karo!")
+        else:
+            # Language
             if "Urdu" in lang:
-                li = "Sab text Roman Urdu mein likho. Jaise: 'Ek aadmi paani ke paas baitha hai...'"
+                li = "Roman Urdu mein likho (Urdu English huroof mein)"
                 ll = "Roman Urdu"
             elif "Hindi" in lang:
-                li = "Sab text Roman Hindi mein likho. Jaise: 'Ek aadmi paani ke paas baitha hai...'"
+                li = "Roman Hindi mein likho (Hindi English huroof mein)"
                 ll = "Roman Hindi"
             else:
-                li = "Write all text in English."
+                li = "Write in English"
                 ll = "English"
 
-            prompt = f"""Watch this video and detect every scene (even 3-5 second scenes).
-{li}
-Return ONLY valid JSON (no markdown, no extra text):
+            style_clean = style.split(" ", 1)[1] if " " in style else style
+
+            prompt = f"""Analyze this video. Detect every scene carefully (even 3-5 second scenes).
+Style: {style_clean} | Aspect Ratio: {ratio} | {li}
+
+Return ONLY valid JSON:
 {{
   "video_title": "title",
-  "video_summary": "2 sentence description",
-  "aspect_ratio": "9:16 or 16:9 etc",
+  "total_scenes": 0,
   "scenes": [
     {{
       "scene_number": 1,
-      "start_time": "0:00",
-      "end_time": "0:06",
-      "duration_seconds": 6,
-      "scene_description": "what happens",
-      "image_prompt": "detailed prompt for Midjourney/DALL-E/SD/Firefly/Leonardo/Flux",
-      "animation_prompt": "motion prompt for Runway/Kling/Pika/Luma/Haiper with camera movements",
-      "audio_prompt": "music/sound for Suno/Udio/ElevenLabs - genre BPM instruments mood",
-      "video_prompt": "cinematic prompt for Sora/Runway/Kling/Pika/Luma/Veo"
+      "timestamp": "0:00 - 0:06",
+      "duration": "6s",
+      "description": "what happens visually",
+      "image_prompt": "detailed for Midjourney/DALL-E/SD/Firefly/Leonardo/Flux, {style_clean} style, {ratio} ratio",
+      "animation_prompt": "motion for Runway/Kling/Pika/Luma/Haiper, camera movements, {ratio}",
+      "audio_prompt": "music/sound for Suno/Udio/ElevenLabs, genre BPM mood instruments",
+      "video_prompt": "cinematic for Sora/Runway/Kling/Pika/Luma/Veo, {ratio} ratio, {style_clean}"
     }}
   ]
-}}
-Detect up to {num_scenes} scenes."""
+}}"""
 
-            with st.spinner("📤 Video process ho rahi hai..."):
-                video_bytes = uploaded.read()
-                video_b64 = base64.b64encode(video_bytes).decode("utf-8")
-                mime = uploaded.type
+            with st.spinner("🧠 Analyzing video scenes..."):
+                try:
+                    video_b64 = base64.b64encode(uploaded.read()).decode("utf-8")
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+                    body = {
+                        "contents": [{"parts": [
+                            {"inline_data": {"mime_type": uploaded.type, "data": video_b64}},
+                            {"text": prompt}
+                        ]}],
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}
+                    }
+                    r = requests.post(url, json=body, timeout=180)
+                    r.raise_for_status()
+                    raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    raw = raw.strip()
+                    if "```" in raw:
+                        parts = raw.split("```")
+                        for p in parts:
+                            p = p.strip()
+                            if p.startswith("json"): p = p[4:].strip()
+                            if p.startswith("{"): raw = p; break
+                    data = json.loads(raw.strip())
+                    scenes = data.get("scenes", [])
 
-            with st.spinner("🧠 AI scenes analyze kar raha hai... (1-2 min)"):
-                raw = call_gemini(api_key, video_b64, mime, prompt)
+                    # Store in session
+                    st.session_state["scenes"] = scenes
+                    st.session_state["title"] = data.get("video_title", "")
+                    st.session_state["ll"] = ll
 
-            raw = raw.strip()
-            if "```" in raw:
-                parts = raw.split("```")
-                for p in parts:
-                    if p.strip().startswith("{") or p.strip().startswith("json"):
-                        raw = p.strip()
-                        if raw.startswith("json"):
-                            raw = raw[4:].strip()
-                        break
+                except requests.exceptions.HTTPError as e:
+                    code = e.response.status_code
+                    if code == 429:
+                        st.error("❌ Too Many Requests — 5 min wait karo!")
+                    elif code == 403:
+                        st.error("❌ API Key galat hai!")
+                    else:
+                        st.error(f"❌ API Error {code}")
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
 
-            data = json.loads(raw)
-            scenes = data.get("scenes", [])
+    # Display scenes
+    if "scenes" in st.session_state:
+        scenes = st.session_state["scenes"]
+        title = st.session_state.get("title", "")
+        ll = st.session_state.get("ll", "English")
 
-            st.markdown(f"""<div class='ok-banner'>
-            ✅ <b>{data.get('video_title','Done')}!</b> — {len(scenes)} scenes | 🌐 {ll}<br>
-            <span style='color:#94a3b8;'>{data.get('video_summary','')}</span>
-            </div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='background:#1a1a2e;border:1px solid #2563eb;border-radius:10px;
+        padding:0.8rem 1rem;margin-bottom:1rem;'>
+        ✅ <b>{title}</b> — {len(scenes)} scenes detected | 🌐 {ll}
+        </div>""", unsafe_allow_html=True)
 
-            c1,c2,c3,c4 = st.columns(4)
-            for col,val,lbl in zip([c1,c2,c3,c4],
-                [len(scenes), data.get('aspect_ratio','N/A'), len(scenes), len(scenes)],
-                ["SCENES","RATIO","IMG PROMPTS","VIDEO PROMPTS"]):
-                with col:
-                    st.metric(lbl, val)
+        for s in scenes:
+            st.markdown(f"""
+            <div class='scene-card'>
+            <div class='scene-title'>
+            📍 Scene {s.get('scene_number','?')} &nbsp;|&nbsp;
+            ⏱️ {s.get('timestamp','')} ({s.get('duration','')})
+            </div>
+            <div style='color:#aaa;font-size:0.85rem;margin-bottom:0.8rem;'>
+            {s.get('description','')}
+            </div>
 
-            st.markdown("---")
+            <div class='prompt-label label-img'>🖼️ Image Prompt</div>
+            <div class='prompt-box'>{s.get('image_prompt','')}</div>
 
-            for s in scenes:
-                st.markdown(f"""<div class='scene-box'>
-                <b>🎬 Scene {s.get('scene_number','?')}</b> &nbsp;
-                <code>{s.get('start_time','')} → {s.get('end_time','')} ({s.get('duration_seconds','')} sec)</code><br>
-                <span style='color:#94a3b8;'>{s.get('scene_description','')}</span>
-                </div>""", unsafe_allow_html=True)
+            <div class='prompt-label label-anim'>🎬 Animation Prompt</div>
+            <div class='prompt-box'>{s.get('animation_prompt','')}</div>
 
-                col1,col2 = st.columns(2)
-                with col1:
-                    st.markdown("**🖼️ IMAGE PROMPT** `Midjourney · DALL-E · SD · Firefly · Leonardo`")
-                    st.code(s.get("image_prompt",""), language=None)
-                    st.markdown("**🔊 AUDIO PROMPT** `Suno · Udio · ElevenLabs · Musicgen`")
-                    st.code(s.get("audio_prompt",""), language=None)
-                with col2:
-                    st.markdown("**🎬 ANIMATION PROMPT** `Runway · Kling · Pika · Luma · Haiper`")
-                    st.code(s.get("animation_prompt",""), language=None)
-                    st.markdown("**📹 VIDEO PROMPT** `Sora · Runway · Kling · Pika · Luma · Veo`")
-                    st.code(s.get("video_prompt",""), language=None)
-                st.markdown("---")
+            <div class='prompt-label label-audio'>🔊 Audio Prompt</div>
+            <div class='prompt-box'>{s.get('audio_prompt','')}</div>
 
-            out = f"VIDEO2PROMPTS REPORT\n{'='*60}\nTitle: {data.get('video_title','')}\nSummary: {data.get('video_summary','')}\nRatio: {data.get('aspect_ratio','')} | Scenes: {len(scenes)} | Language: {ll}\n{'='*60}\n\n"
-            for s in scenes:
-                out += f"SCENE {s['scene_number']} [{s.get('start_time','')} -> {s.get('end_time','')}] {s.get('duration_seconds','')} sec\n"
-                out += f"Description: {s.get('scene_description','')}\n\nIMAGE PROMPT:\n{s.get('image_prompt','')}\n\nANIMATION PROMPT:\n{s.get('animation_prompt','')}\n\nAUDIO PROMPT:\n{s.get('audio_prompt','')}\n\nVIDEO PROMPT:\n{s.get('video_prompt','')}\n\n{'-'*60}\n\n"
+            <div class='prompt-label label-video'>📹 Video Prompt</div>
+            <div class='prompt-box'>{s.get('video_prompt','')}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            d1,d2 = st.columns(2)
-            with d1:
-                st.download_button("📥 TXT Download", data=out, file_name="prompts.txt", mime="text/plain", use_container_width=True)
-            with d2:
-                st.download_button("📋 JSON Download", data=json.dumps(data, indent=2, ensure_ascii=False), file_name="prompts.json", mime="application/json", use_container_width=True)
+        # Download
+        st.markdown("---")
+        out = f"B-ROLL DIRECTOR AI — SCENE BREAKDOWN\n{'='*60}\nTitle: {title} | Language: {ll}\n{'='*60}\n\n"
+        for s in scenes:
+            out += f"SCENE {s['scene_number']} | {s.get('timestamp','')} ({s.get('duration','')})\n"
+            out += f"Description: {s.get('description','')}\n\n"
+            out += f"IMAGE:\n{s.get('image_prompt','')}\n\nANIMATION:\n{s.get('animation_prompt','')}\n\nAUDIO:\n{s.get('audio_prompt','')}\n\nVIDEO:\n{s.get('video_prompt','')}\n\n{'-'*60}\n\n"
 
-        except json.JSONDecodeError:
-            st.error("❌ Response parse nahi hua. Dobara try karo.")
-        except requests.exceptions.HTTPError as e:
-            if "400" in str(e):
-                st.error("❌ API Key galat hai ya video bahut bari hai!")
-            elif "403" in str(e):
-                st.error("❌ API Key sahi nahi — dobara check karo!")
-            else:
-                st.error(f"❌ API Error: {str(e)}")
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
+        d1, d2 = st.columns(2)
+        with d1:
+            st.download_button("📥 Download TXT", data=out, file_name="broll_scenes.txt", mime="text/plain", use_container_width=True)
+        with d2:
+            st.download_button("📋 Download JSON", data=json.dumps(st.session_state.get("scenes",[]), indent=2, ensure_ascii=False), file_name="broll_scenes.json", mime="application/json", use_container_width=True)
 
-elif not uploaded:
-    st.markdown("""
-    <div style='text-align:center;padding:3rem;background:#10101c;border:2px dashed #252540;border-radius:16px;margin-top:1rem;'>
-    <div style='font-size:3rem;'>🎬</div>
-    <div style='font-size:1.2rem;font-weight:800;margin:0.8rem 0;'>Video Upload Karo</div>
-    <div style='font-size:0.85rem;color:#64748b;line-height:2;'>
-    ✅ Har scene detect hoga (3 sec se bhi)<br>
-    🖼️ Image · 🎬 Animation · 🔊 Audio · 📹 Video Prompts<br>
-    MP4 · MOV · AVI · MKV | 2 min se kam
-    </div>
-    </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style='background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;
+        padding:3rem;text-align:center;color:#444;'>
+        <div style='font-size:2rem;margin-bottom:1rem;'>🎬</div>
+        Upload a video and click Analyze<br>to see scene breakdown here
+        </div>""", unsafe_allow_html=True)
